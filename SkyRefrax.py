@@ -17,8 +17,8 @@ def calculate_n_lambda(wavelength, pressure, temperature, humidity):
     term3 = term2 - (0.0624 - (0.000680 / wavelength) / (1 + 0.003661 * temperature)) * f
     return term3 / 1e6 + 1
 
-def calculate_delta_r(n_lambda, n_5000, angle_rad):
-    return 206265 * (n_lambda - n_5000) * math.tan(angle_rad)
+def calculate_delta_r(n_lambda, n_ref, angle_rad):
+    return 206265 * (n_lambda - n_ref) * math.tan(angle_rad)
 
 def parse_angle(angle_str):
     try:
@@ -31,63 +31,70 @@ class RefractionCalculator(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self.init_ui()
-    
+
     def init_ui(self):
         self.setWindowTitle("SkyRefrax")
         self.setGeometry(100, 100, 600, 400)
-        
+
         layout = QtWidgets.QVBoxLayout()
-        
+
+        self.reference_wavelength_input = QtWidgets.QLineEdit()
+        self.reference_wavelength_input.setPlaceholderText("Reference Wavelength (Å)")
+        layout.addWidget(self.reference_wavelength_input)
+
         self.wavelength_input = QtWidgets.QLineEdit()
         self.wavelength_input.setPlaceholderText("Wavelengths (Å), comma-separated")
         layout.addWidget(self.wavelength_input)
-        
+
         self.angles_input = QtWidgets.QLineEdit()
         self.angles_input.setPlaceholderText("Zenith Angles (deg, min, sec), comma-separated")
         layout.addWidget(self.angles_input)
-        
+
         self.pressure_input = QtWidgets.QLineEdit()
         self.pressure_input.setPlaceholderText("Pressure (mmHg)")
         layout.addWidget(self.pressure_input)
-        
+
         self.temperature_input = QtWidgets.QLineEdit()
         self.temperature_input.setPlaceholderText("Temperature (°C)")
         layout.addWidget(self.temperature_input)
-        
+
         self.humidity_input = QtWidgets.QLineEdit()
         self.humidity_input.setPlaceholderText("Relative Humidity (%)")
         layout.addWidget(self.humidity_input)
-        
+
         self.calculate_button = QtWidgets.QPushButton("Calculate")
         self.calculate_button.clicked.connect(self.calculate)
         layout.addWidget(self.calculate_button)
-        
+
         self.export_button = QtWidgets.QPushButton("Export Table")
         self.export_button.clicked.connect(self.export_table)
         layout.addWidget(self.export_button)
-        
+
         self.table = QtWidgets.QTableWidget()
         layout.addWidget(self.table)
-        
+
         self.setLayout(layout)
-    
+
     def calculate(self):
         try:
+            self.reference_wavelength = float(self.reference_wavelength_input.text())
+
             self.wavelengths = list(map(float, self.wavelength_input.text().split(',')))
             self.angles = list(map(parse_angle, self.angles_input.text().split(',')))
             pressure = float(self.pressure_input.text())
             temperature = float(self.temperature_input.text())
             humidity = float(self.humidity_input.text())
-            
+
             if None in self.angles:
                 QtWidgets.QMessageBox.critical(self, "Error", "Invalid angle format!")
                 return
-            
-            n_5000 = calculate_n_lambda(5500 * 1e-4, pressure, temperature, humidity)
+
+            n_ref = calculate_n_lambda(self.reference_wavelength * 1e-4, pressure, temperature, humidity)
+
             self.n_lambda = [calculate_n_lambda(wl * 1e-4, pressure, temperature, humidity) for wl in self.wavelengths]
-            
-            self.refraction_deltas = [[calculate_delta_r(nl, n_5000, ang) for nl in self.n_lambda] for ang in self.angles]
-            
+
+            self.refraction_deltas = [[calculate_delta_r(nl, n_ref, ang) for nl in self.n_lambda] for ang in self.angles]
+
             self.table.setRowCount(len(self.angles))
             self.table.setColumnCount(len(self.wavelengths))
             self.table.setHorizontalHeaderLabels([f"{wl} Å" for wl in self.wavelengths])
@@ -96,21 +103,21 @@ class RefractionCalculator(QtWidgets.QWidget):
             for i, row in enumerate(self.refraction_deltas):
                 for j, value in enumerate(row):
                     self.table.setItem(i, j, QtWidgets.QTableWidgetItem(f"{round(value, 2)}"))
-        
+
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"An error occurred: {e}")
-    
+
     def export_table(self):
         try:
             if not hasattr(self, 'refraction_deltas'):
                 QtWidgets.QMessageBox.critical(self, "Error", "No data available. Calculate first!")
                 return
-            
+
             fig, ax = plt.subplots(figsize=(len(self.wavelengths) * 0.8, len(self.angles) * 0.5))
             fig.suptitle("SkyRefrax", fontsize=12, fontweight='bold', y=0.95)
             ax.axis('tight')
             ax.axis('off')
-            
+
             table_data = [[round(value, 2) for value in row] for row in self.refraction_deltas]
             col_labels = [f"{wl} Å" for wl in self.wavelengths]
             row_labels = [f"{round(1/(math.cos(a)), 2)} ({math.degrees(a):.2f}°)" for a in self.angles]
@@ -119,7 +126,7 @@ class RefractionCalculator(QtWidgets.QWidget):
             table.auto_set_font_size(False)
             table.set_fontsize(8)
             table.scale(1.5, 1.5)
-            
+
             options = QtWidgets.QFileDialog.Options()
             file_path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Table", "", "PNG Files (*.png);;PDF Files (*.pdf)", options=options)
             
@@ -127,7 +134,7 @@ class RefractionCalculator(QtWidgets.QWidget):
                 plt.savefig(file_path, bbox_inches='tight', dpi=300)
                 QtWidgets.QMessageBox.information(self, "Success", f"Table saved to {file_path}")
             plt.close()
-        
+
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"An error occurred: {e}")
 

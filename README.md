@@ -52,6 +52,3 @@ You can save the table as a PNG or PDF file via the "Export Table" button.
 
 ## License
 This project is licensed under the MIT License.
-
-## Author
-Leonardo Tozzo - [GitHub Profile](https://github.com/Icorebleidd)
